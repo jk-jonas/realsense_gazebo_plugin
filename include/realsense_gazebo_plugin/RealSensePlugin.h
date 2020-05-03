@@ -134,6 +134,10 @@ protected:
 
   float rangeMinDepth_;
   float rangeMaxDepth_;
+
+  bool disableColor_ = false;
+  bool disableDepth_ = false;
+  bool disableIred_ = false;
 };
 }
 #endif

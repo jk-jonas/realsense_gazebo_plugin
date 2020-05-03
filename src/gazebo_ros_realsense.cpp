@@ -40,14 +40,20 @@ void GazeboRosRealsense::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf) {
 
   this->itnode_ = new image_transport::ImageTransport(*this->rosnode_);
 
-  this->color_pub_ = this->itnode_->advertiseCamera(
-      cameraParamsMap_[COLOR_CAMERA_NAME].topic_name, 2);
-  this->ir1_pub_ = this->itnode_->advertiseCamera(
-      cameraParamsMap_[IRED1_CAMERA_NAME].topic_name, 2);
-  this->ir2_pub_ = this->itnode_->advertiseCamera(
-      cameraParamsMap_[IRED2_CAMERA_NAME].topic_name, 2);
-  this->depth_pub_ = this->itnode_->advertiseCamera(
-      cameraParamsMap_[DEPTH_CAMERA_NAME].topic_name, 2);
+  if (!disableColor_) {
+    this->color_pub_ = this->itnode_->advertiseCamera(
+        cameraParamsMap_[COLOR_CAMERA_NAME].topic_name, 2);
+  }
+  if (!disableIred_) {
+    this->ir1_pub_ = this->itnode_->advertiseCamera(
+        cameraParamsMap_[IRED1_CAMERA_NAME].topic_name, 2);
+    this->ir2_pub_ = this->itnode_->advertiseCamera(
+        cameraParamsMap_[IRED2_CAMERA_NAME].topic_name, 2);
+  }
+  if (!disableDepth_) {
+    this->depth_pub_ = this->itnode_->advertiseCamera(
+        cameraParamsMap_[DEPTH_CAMERA_NAME].topic_name, 2);
+  }
   if (pointCloud_)
   {
     this->pointcloud_pub_ =
@@ -61,12 +67,22 @@ void GazeboRosRealsense::OnNewFrame(const rendering::CameraPtr cam,
 
   // identify camera
   std::string camera_id = extractCameraName(cam->Name());
-  const std::map<std::string, image_transport::CameraPublisher *>
-      camera_publishers = {
-          {COLOR_CAMERA_NAME, &(this->color_pub_)},
-          {IRED1_CAMERA_NAME, &(this->ir1_pub_)},
-          {IRED2_CAMERA_NAME, &(this->ir2_pub_)},
-      };
+  std::map<std::string, image_transport::CameraPublisher *>
+      camera_publishers;
+  if (!disableColor_) {
+    camera_publishers.insert(
+      std::pair<std::string, image_transport::CameraPublisher *>
+      (COLOR_CAMERA_NAME, &(this->color_pub_)));
+  }
+  if (!disableIred_) {
+    camera_publishers.insert(
+      std::pair<std::string, image_transport::CameraPublisher *>
+      (IRED1_CAMERA_NAME, &(this->ir1_pub_)));
+      camera_publishers.insert(
+      std::pair<std::string, image_transport::CameraPublisher *>
+      (IRED2_CAMERA_NAME, &(this->ir2_pub_)));
+  }
+
   const auto image_pub = camera_publishers.at(camera_id);
 
   // copy data into image
@@ -87,11 +103,20 @@ void GazeboRosRealsense::OnNewFrame(const rendering::CameraPtr cam,
             reinterpret_cast<const void *>(cam->ImageData()));
 
   // identify camera rendering
-  const std::map<std::string, rendering::CameraPtr> cameras = {
-      {COLOR_CAMERA_NAME, this->colorCam},
-      {IRED1_CAMERA_NAME, this->ired1Cam},
-      {IRED2_CAMERA_NAME, this->ired2Cam},
-  };
+  std::map<std::string, rendering::CameraPtr> cameras;
+  if (!disableColor_) {
+    cameras.insert(
+      std::pair<std::string, rendering::CameraPtr>
+      (COLOR_CAMERA_NAME, this->colorCam));
+  }
+  if (!disableIred_) {
+    cameras.insert(
+      std::pair<std::string, rendering::CameraPtr>
+      (IRED1_CAMERA_NAME, this->colorCam));
+    cameras.insert(
+      std::pair<std::string, rendering::CameraPtr>
+      (IRED2_CAMERA_NAME, this->colorCam));
+  }
 
   // publish to ROS
   auto camera_info_msg =

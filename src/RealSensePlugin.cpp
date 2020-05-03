@@ -60,6 +60,12 @@ void RealSensePlugin::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf) {
     std::string name = _sdf->GetName();
     if (name == "depthUpdateRate")
       _sdf->GetValue()->Get(depthUpdateRate_);
+    else if (name == "disableColor")
+      _sdf->GetValue()->Get(disableColor_);
+    else if (name == "disableDepth")
+      _sdf->GetValue()->Get(disableDepth_);
+    else if (name == "disableIred")
+      _sdf->GetValue()->Get(disableIred_);
     else if (name == "colorUpdateRate")
       _sdf->GetValue()->Get(colorUpdateRate_);
     else if (name == "infraredUpdateRate")
@@ -122,6 +128,12 @@ void RealSensePlugin::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf) {
     _sdf = _sdf->GetNextElement();
   } while (_sdf);
 
+  if (disableDepth_ && pointCloud_) {
+    std::cout << "RealSensePlugin: Depth Camera is disabled and pointcloud will be disabled as well. "
+                << std::endl;
+    pointCloud_ = false;
+  }
+
   // Store a pointer to the this model
   this->rsModel = _model;
 
@@ -132,50 +144,59 @@ void RealSensePlugin::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf) {
   sensors::SensorManager *smanager = sensors::SensorManager::Instance();
 
   // Get Cameras Renderers
-  this->depthCam = std::dynamic_pointer_cast<sensors::DepthCameraSensor>(
-                       smanager->GetSensor(prefix + DEPTH_CAMERA_NAME))
-                       ->DepthCamera();
-
-  this->ired1Cam = std::dynamic_pointer_cast<sensors::CameraSensor>(
-                       smanager->GetSensor(prefix + IRED1_CAMERA_NAME))
-                       ->Camera();
-  this->ired2Cam = std::dynamic_pointer_cast<sensors::CameraSensor>(
-                       smanager->GetSensor(prefix + IRED2_CAMERA_NAME))
-                       ->Camera();
-  this->colorCam = std::dynamic_pointer_cast<sensors::CameraSensor>(
-                       smanager->GetSensor(prefix + COLOR_CAMERA_NAME))
-                       ->Camera();
-
   // Check if camera renderers have been found successfuly
-  if (!this->depthCam) {
-    std::cerr << "RealSensePlugin: Depth Camera has not been found"
-              << std::endl;
-    return;
+  if (!disableDepth_) {
+    this->depthCam = std::dynamic_pointer_cast<sensors::DepthCameraSensor>(
+                        smanager->GetSensor(prefix + DEPTH_CAMERA_NAME))
+                        ->DepthCamera();
+    if (!this->depthCam) {
+      std::cerr << "RealSensePlugin: Depth Camera has not been found"
+                << std::endl;
+      return;
+    }
   }
-  if (!this->ired1Cam) {
-    std::cerr << "RealSensePlugin: InfraRed Camera 1 has not been found"
-              << std::endl;
-    return;
+  if (!disableIred_) {
+    this->ired1Cam = std::dynamic_pointer_cast<sensors::CameraSensor>(
+                        smanager->GetSensor(prefix + IRED1_CAMERA_NAME))
+                        ->Camera();
+    this->ired2Cam = std::dynamic_pointer_cast<sensors::CameraSensor>(
+                        smanager->GetSensor(prefix + IRED2_CAMERA_NAME))
+                        ->Camera();
+    if (!this->ired1Cam) {
+      std::cerr << "RealSensePlugin: InfraRed Camera 1 has not been found"
+                << std::endl;
+      return;
+    }
+    if (!this->ired2Cam) {
+      std::cerr << "RealSensePlugin: InfraRed Camera 2 has not been found"
+                << std::endl;
+      return;
+    }
   }
-  if (!this->ired2Cam) {
-    std::cerr << "RealSensePlugin: InfraRed Camera 2 has not been found"
-              << std::endl;
-    return;
+  if (!disableColor_) {
+    this->colorCam = std::dynamic_pointer_cast<sensors::CameraSensor>(
+                        smanager->GetSensor(prefix + COLOR_CAMERA_NAME))
+                        ->Camera();
+    if (!this->colorCam) {
+      std::cerr << "RealSensePlugin: Color Camera has not been found"
+                << std::endl;
+      return;
+    }
   }
-  if (!this->colorCam) {
-    std::cerr << "RealSensePlugin: Color Camera has not been found"
-              << std::endl;
-    return;
-  }
+  
 
-  // Resize Depth Map dimensions
-  try {
-    this->depthMap.resize(this->depthCam->ImageWidth() *
-                          this->depthCam->ImageHeight());
-  } catch (std::bad_alloc &e) {
-    std::cerr << "RealSensePlugin: depthMap allocation failed: " << e.what()
-              << std::endl;
-    return;
+  
+
+  if (!disableDepth_) {
+    // Resize Depth Map dimensions
+    try {
+      this->depthMap.resize(this->depthCam->ImageWidth() *
+                            this->depthCam->ImageHeight());
+    } catch (std::bad_alloc &e) {
+      std::cerr << "RealSensePlugin: depthMap allocation failed: " << e.what()
+                << std::endl;
+      return;
+    }
   }
 
   // Setup Transport Node
@@ -185,27 +206,37 @@ void RealSensePlugin::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf) {
   // Setup Publishers
   std::string rsTopicRoot = "~/" + this->rsModel->GetName();
 
+  if ((!disableDepth_)) {
   this->depthPub = this->transportNode->Advertise<msgs::ImageStamped>(
       rsTopicRoot + DEPTH_CAMERA_TOPIC, 1, depthUpdateRate_);
-  this->ired1Pub = this->transportNode->Advertise<msgs::ImageStamped>(
-      rsTopicRoot + IRED1_CAMERA_TOPIC, 1, infraredUpdateRate_);
-  this->ired2Pub = this->transportNode->Advertise<msgs::ImageStamped>(
-      rsTopicRoot + IRED2_CAMERA_TOPIC, 1, infraredUpdateRate_);
-  this->colorPub = this->transportNode->Advertise<msgs::ImageStamped>(
-      rsTopicRoot + COLOR_CAMERA_TOPIC, 1, colorUpdateRate_);
+  }
+  if (!disableIred_) {
+    this->ired1Pub = this->transportNode->Advertise<msgs::ImageStamped>(
+        rsTopicRoot + IRED1_CAMERA_TOPIC, 1, infraredUpdateRate_);
+    this->ired2Pub = this->transportNode->Advertise<msgs::ImageStamped>(
+        rsTopicRoot + IRED2_CAMERA_TOPIC, 1, infraredUpdateRate_);
+  }
+  if (!disableColor_) {
+    this->colorPub = this->transportNode->Advertise<msgs::ImageStamped>(
+        rsTopicRoot + COLOR_CAMERA_TOPIC, 1, colorUpdateRate_);
+  }
 
   // Listen to depth camera new frame event
-  this->newDepthFrameConn = this->depthCam->ConnectNewDepthFrame(
-      std::bind(&RealSensePlugin::OnNewDepthFrame, this));
+  if (!disableDepth_) {
+    this->newDepthFrameConn = this->depthCam->ConnectNewDepthFrame(
+        std::bind(&RealSensePlugin::OnNewDepthFrame, this));
+  }
+  if (!disableIred_) {
+    this->newIred1FrameConn = this->ired1Cam->ConnectNewImageFrame(std::bind(
+        &RealSensePlugin::OnNewFrame, this, this->ired1Cam, this->ired1Pub));
 
-  this->newIred1FrameConn = this->ired1Cam->ConnectNewImageFrame(std::bind(
-      &RealSensePlugin::OnNewFrame, this, this->ired1Cam, this->ired1Pub));
-
-  this->newIred2FrameConn = this->ired2Cam->ConnectNewImageFrame(std::bind(
-      &RealSensePlugin::OnNewFrame, this, this->ired2Cam, this->ired2Pub));
-
+    this->newIred2FrameConn = this->ired2Cam->ConnectNewImageFrame(std::bind(
+        &RealSensePlugin::OnNewFrame, this, this->ired2Cam, this->ired2Pub));
+  }
+  if (!disableColor_) {
   this->newColorFrameConn = this->colorCam->ConnectNewImageFrame(std::bind(
       &RealSensePlugin::OnNewFrame, this, this->colorCam, this->colorPub));
+  }
 
   // Listen to the update event
   this->updateConnection = event::Events::ConnectWorldUpdateBegin(
